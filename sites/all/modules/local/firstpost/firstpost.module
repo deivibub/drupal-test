@@ -15,3 +15,54 @@ function firstpost_help() {
     }
     return $help;
 }
+
+
+/**
+ * Hook für das anpassen eines Formulars
+ * verstecken der publish settings 
+ */
+function firstpost_form_alter(&$form, $form_state, $form_id){
+    global $user;
+    if($form_id == 'page_node_form'){
+//        if($user->role == 2){
+            if(!_firstpost_user_has_nodes()){
+                _firstpost_deactivate_options($form);
+            }
+        }
+//    }
+    krumo($user);
+}
+
+function _firstpost_user_has_nodes(){
+    global $user;
+    $result = db_query('SELECT count(uid) FROM {node} WHERE type = \'page\' AND uid = %s', array($user->uid));
+    $count = db_result($result);
+    return (bool) $count;
+}
+
+/**
+ * deaktiviert die Felder für die Veröffentlichungsoptionen
+ * @param type $form
+ */
+function _firstpost_deactivate_options(&$form){
+    $form['options']['status']['#disabled'] = TRUE;
+    $form['options']['promote']['#disabled'] = TRUE;
+    $form['options']['sticky']['#disabled'] = TRUE;
+}
+
+
+
+function firstpost_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+    if($op == 'presave') {
+        echo 'meff';
+        firstpost_unpublish_new_node($node);
+    }
+}
+
+/**
+ * überschreibt den Wert für das Veröffentlichen eines neuen Nodes durch einen authentifizierten Nutzer
+ * @param type $node
+ */
+function firstpost_unpublish_new_node(&$node) {
+    
+}
