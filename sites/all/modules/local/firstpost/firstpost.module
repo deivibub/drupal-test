@@ -1,5 +1,7 @@
 <?php
 
+global $__firstpost_flag;
+
 /**
  * Display help and module information
  * @param path which path of the site we're displaying help
@@ -8,7 +10,7 @@
  */
 function firstpost_help() {
     $help = '';
-    switch($path) {
+    switch ($path) {
         case "admin/help#firstpost":
             $help = 'provides an action and a trigger to avoid new users to publish there first node instantly';
             break;
@@ -16,53 +18,123 @@ function firstpost_help() {
     return $help;
 }
 
+/**
+ * Helper für zu prüfende Werte
+ * 
+ * @param String key
+ * @return mixed liefert FALSE falls $key nicht gesetzt ist
+ */
+function __firstpost_fetch($key) {
+    $fetch = array(
+        'form_id' => 'page_node_form',
+        'node_type' => 'page',
+        'user_role' => 2,
+    );
+    $value = false;
+
+    if (array_key_exists($key, $fetch)) {
+        $value = $fetch[$key];
+    }
+    return $value;
+}
 
 /**
  * Hook für das anpassen eines Formulars
  * verstecken der publish settings 
+ * 
+ * @return void
  */
-function firstpost_form_alter(&$form, $form_state, $form_id){
-    global $user;
-    if($form_id == 'page_node_form'){
-//        if($user->role == 2){
-            if(!_firstpost_user_has_nodes()){
-                _firstpost_deactivate_options($form);
-            }
+function firstpost_form_alter(&$form, $form_state, $form_id) {
+    if ($form_id == __firstpost_fetch('form_id')) {
+        if (!_firstpost_user_has_nodes()) {
+            _firstpost_deactivate_options($form);
         }
-//    }
-    krumo($user);
-}
-
-function _firstpost_user_has_nodes(){
-    global $user;
-    $result = db_query('SELECT count(uid) FROM {node} WHERE type = \'page\' AND uid = %s', array($user->uid));
-    $count = db_result($result);
-    return (bool) $count;
-}
-
-/**
- * deaktiviert die Felder für die Veröffentlichungsoptionen
- * @param type $form
- */
-function _firstpost_deactivate_options(&$form){
-    $form['options']['status']['#disabled'] = TRUE;
-    $form['options']['promote']['#disabled'] = TRUE;
-    $form['options']['sticky']['#disabled'] = TRUE;
-}
-
-
-
-function firstpost_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
-    if($op == 'presave') {
-        echo 'meff';
-        firstpost_unpublish_new_node($node);
     }
 }
 
 /**
- * überschreibt den Wert für das Veröffentlichen eines neuen Nodes durch einen authentifizierten Nutzer
- * @param type $node
+ * Hook um den publish-status auf FALSE zu setzen und 
+ * eine Nachricht an die Onlineredaktion zu senden
+ * 
+ * @param Object $node der Beitrag
+ * @param String $op Prozessschritt
+ * @param Object $a3
+ * @param Object $a4
+ * @return void
  */
-function firstpost_unpublish_new_node(&$node) {
-    
+function firstpost_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+    global $__firstpost_flag;
+    if ($op == 'presave') {
+        if (!_firstpost_user_has_nodes()) {
+            // status auf unveröffentlicht setzen
+            $node->status = FALSE;
+            $__firstpost_flag = true;
+        }
+    }
+    if ($__firstpost_flag && $op == 'insert') {
+        _firstpost_send_mail($node);
+    }
+}
+
+/**
+ * deaktiviert die Felder für die Veröffentlichungsoptionen
+ * 
+ * @param type $form
+ * @return void
+ */
+function _firstpost_deactivate_options(&$form) {
+    $form['options']['status']['#disabled'] = TRUE;
+    $form['options']['promote']['#disabled'] = TRUE;
+    $form['options']['sticky']['#disabled'] = TRUE;
+
+    $form['firstpost_notice'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Hinweis zur Veröffentlichung'),
+        'message' => array(
+            '#value' => 'Dein erster Artikel blah',
+        )
+    );
+}
+
+/**
+ * prüft ob der aktuelle Nutzer bereits eine Node erstellt hatte und diese veröffentlicht ist
+ * 
+ * @global Object $user
+ * @return Boolean
+ */
+function _firstpost_user_has_nodes() {
+    global $user;
+    $count = 0;
+    if ($user->uid != 1 && array_key_exists((int) __firstpost_fetch('user_role'), $user->roles)) {
+        $result = db_query('SELECT count(n.nid) FROM {node} as n WHERE status = 1 AND n.uid NOT IN(SELECT u.uid FROM {users_roles} as u) AND n.type = \'%s\' AND n.uid <> 1 AND n.uid = %s', array(__firstpost_fetch('node_type'), $user->uid));
+        $count = db_result($result);
+    } else {
+        // die aktuelle role ist irrelevant oder es schrob der Admin
+        $count = 1;
+    }
+    return ((int) $count > 0 ? TRUE : FALSE);
+}
+
+/**
+ * Eine Nachricht an die Onlineredaktion versenden
+ * @return void
+ */
+function _firstpost_send_mail(&$node) {
+    global $user;
+    $link = url(drupal_get_path_alias('node/' . $node->nid), array('absolute' => TRUE));
+    $headers = array(
+        'MIME-Version' => '1.0',
+        'Content-Type' => 'text/plain; charset=UTF-8; format=flowed; delsp=yes',
+        'Content-Transfer-Encoding' => '8Bit',
+        'X-Mailer' => 'Drupal',
+        'From' => 'drupal@spiesser.de'
+    );
+    $message = array(
+        'to' => 'thomas.mueller@spiesser.de',
+        'subject' => t('Ein neu registrierter Benutzer ' . $user->name),
+        'body' => t('Bitte prüft den Artikel ' . $link . ' und gebt ihn frei.'),
+        'headers' => $headers,
+    );
+
+    drupal_mail_send($message);
 }
