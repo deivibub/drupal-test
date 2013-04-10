@@ -1,0 +1,6 @@
+name = First Post
+description = Check wether an user wrote hist first post and avoid it gets published after saving
+core = 6.x
+version = "6.x-0.3-dev"
+dependencies[] = trigger
+package = "Triggers"

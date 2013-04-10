@@ -1,0 +1,17 @@
+<?php
+
+/**
+ * Display help and module information
+ * @param path which path of the site we're displaying help
+ * @param arg array that holds the current path as would be returned from arg() function
+ * @return help text for the path
+ */
+function firstpost_help() {
+    $help = '';
+    switch($path) {
+        case "admin/help#firstpost":
+            $help = 'provides an action and a trigger to avoid new users to publish there first node instantly';
+            break;
+    }
+    return $help;
+}
